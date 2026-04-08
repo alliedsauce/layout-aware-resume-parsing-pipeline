@@ -31,7 +31,7 @@
 ชุดข้อมูลที่ใช้ในโครงการประกอบด้วย **เรซูเม่จำนวน 200 ใบ** ในรูปแบบไฟล์ภาพและ PDF  
 ลักษณะของข้อมูล:
 - 🗂 โครงสร้างเรซูเม่หลากหลาย (1–2 คอลัมน์)
-- 🌐 รองรับทั้งภาษาไทยและภาษาอังกฤษ
+- 🌐 ทั้งภาษาไทยและภาษาอังกฤษ
 - 🧪 ใช้สำหรับการฝึกและทดสอบระบบ Layout Detection และ Parsing
 
 ---
@@ -41,49 +41,69 @@
 - 🎥 **OpenCV** – จัดการและประมวลผลภาพ  
 - 🔤 **OCR Engine (Google Cloud Vision)** – แปลงข้อความจากภาพ  
 - 🧾 **pythainlp** – ประมวลผลภาษาธรรมชาติและดึงข้อมูลเชิงความหมาย  
-- 🐍 **Python** – ภาษาหลักในการพัฒนาระบบ  
+- 🐍 **Python** – ภาษาหลักในการพัฒนาระบบ
+- 🖼️ **PyMuPDF** – แปลงไฟล์ PDF เป็นรูปภาพ JPG
 
 ---
+
 ## 🔗 System Architecture
 
 ![SystemArchitecture](Material/SA.png)
 
 ---
-## 🌐 Methodology
-### 1️⃣ Layout Detection (YOLO11s)
-ตรวจจับ section หลักของเรซูเม่ เช่น Personality, Education, Experience, Skills, Project และ Training เพื่อระบุขอบเขตและตำแหน่งเชิงพื้นที่ของข้อมูล
+
+## ⚙️ Methodology
+
+ระบบถูกออกแบบในรูปแบบ **Layout-Aware Multi-Stage Pipeline** โดยมีการทดลองและเปรียบเทียบโมเดลในแต่ละขั้นตอนที่สำคัญ เพื่อคัดเลือกโมเดลที่เหมาะสมที่สุดสำหรับการประมวลผลเรซูเม่ที่มีรูปแบบหลากหลาย
+
+### 1️⃣ Layout Detection (YOLO11 Series)
+ในขั้นตอนการตรวจจับโครงสร้างเรซูเม่ ได้ทดลองใช้โมเดล **YOLO11n, YOLO11s, YOLO11m และ YOLO11xl** เพื่อเปรียบเทียบประสิทธิภาพในการตรวจจับ section หลักของเรซูเม่ ได้แก่ Personality, Education, Experience, Skills, Project และ Training
+การทดลองเปรียบเทียบพิจารณาจากตัวชี้วัดมาตรฐาน เช่น Precision, Recall และ mAP@0.5 ภายใต้เงื่อนไขการฝึกเดียวกัน
 
 ### 2️⃣ Section‑based Image Cropping
-ตัดภาพเรซูเม่ตาม bounding box เพื่อลดสัญญาณรบกวนและแยกการประมวลผลแต่ละ section อย่างอิสระ
+หลังจากได้ bounding box ของแต่ละ section จากโมเดลที่คัดเลือก ระบบจะทำการตัดภาพเรซูเม่ตามขอบเขตของแต่ละ section เพื่อแยกการประมวลผลข้อมูลแต่ละส่วนออกจากกัน ขั้นตอนนี้ช่วยลดสัญญาณรบกวนและรักษาบริบทเชิงพื้นที่ของข้อมูล
 
 ### 3️⃣ Optical Character Recognition (OCR)
-ใช้ Google Cloud Vision API แปลงข้อความจากภาพเป็นตัวอักษร โดยทำ OCR แยกตาม section เพื่อรักษาบริบทของข้อมูล
+ในขั้นตอนการดึงข้อความจากภาพ ได้ทดลองใช้งาน OCR engine หลายตัว เช่น PaddleOCR, Surya OCR, EasyOCR, Google Cloud Vision เพื่อเปรียบเทียบความสามารถในการอ่านข้อความภาษาไทยและความเสถียรในการใช้งาน ภายใต้สภาพแวดล้อม Google Colab
 
 ### 4️⃣ Semantic Information Extraction (NLP)
-ใช้ PyThaiNLP สำหรับการประมวลผลข้อความภาษาไทย ช่วยตัดคำและจัดรูปแบบข้อความ รองรับการประมวลผลแบบ Section‑Aware Semantic Extraction
+ข้อความที่ได้จาก OCR จะถูกนำมาประมวลผลเชิงความหมายด้วยเทคนิค NLP สำหรับข้อความภาษาไทย โดยจะเปรียบเทียบจาก NLP engine หลายตัว เช่น PyThaiNLP, spaCy, WangchanBERTa เป็นต้น เพื่อช่วยในการตัดคำและจัดรูปแบบข้อความ การประมวลผลในขั้นตอนนี้ถูกออกแบบให้เป็นแบบ **Section-Aware Semantic Extraction** เพื่อเพิ่มความถูกต้องในการตีความข้อมูลภายใต้บริบทของ section
 
 ### 5️⃣ Structured Output
-จัดเก็บผลลัพธ์สุดท้ายในรูปแบบ JSON พร้อมนำไปใช้งานหรือต่อยอดในระบบอื่น
+ผลลัพธ์สุดท้ายของระบบจะถูกจัดเก็บในรูปแบบ **Structured JSON** ซึ่งสะท้อนโครงสร้างของเรซูเม่และสามารถนำไปใช้งานหรือพัฒนาต่อยอดในระบบอื่นได้
 
 ---
 
-## 🔀 Experimental / Sample Results
+
+## 🧩 Experimental / Sample Results
+
+ส่วนนี้นำเสนอผลลัพธ์จากการทดลองของระบบตั้งแต่ขั้นตอนการเตรียมข้อมูล ไปจนถึงผลลัพธ์ของการตรวจจับโครงสร้างเรซูเม่ และการประมวลผลในแต่ละ stage เพื่อแสดงการทำงานจริงของ Layout‑Aware Resume Parsing Pipeline
 
 ### 👀 1. การจับคู่ข้อมูลรูปภาพและป้ายกำกับ (Image–Label Pairing)
-ขั้นตอนแรกของการทดลองคือการเตรียมและตรวจสอบความถูกต้องของข้อมูลที่ใช้ในการฝึกโมเดลตรวจจับโครงสร้างเอกสาร (Layout Detection) ซึ่งประกอบด้วยการจับคู่ระหว่างไฟล์รูปเรซูเม่และไฟล์ป้ายกำกับ (label) ที่ระบุขอบเขตและประเภทของแต่ละ section
+คือการเตรียมและตรวจสอบความถูกต้องของข้อมูลที่ใช้ในการฝึกโมเดลตรวจจับโครงสร้างเอกสาร (Layout Detection) ซึ่งประกอบด้วยการจับคู่ระหว่างไฟล์รูปเรซูเม่และไฟล์ป้ายกำกับ (label) ที่ระบุขอบเขตและประเภทของแต่ละ section
 
 ### 📚 1.1 Input
-ข้อมูลนำเข้า (Input) เป็นเรซูเม่ในรูปแบบไฟล์ภาพหรือ PDF ซึ่งถูกแปลงเป็นภาพก่อนนำเข้าสู่กระบวนการประมวลผล โดยเรซูเม่แต่ละใบมีรูปแบบการจัดวางที่แตกต่างกัน เช่น แบบหนึ่งคอลัมน์และสองคอลัมน์
-- ตัวอย่าง Input: รูปเรซูเม่ต้นฉบับทั้ง 2 แบบ (1 column และ แบบ 2 column) โดยยังไม่มีการแบ่ง section หรือประมวลผลใด ๆ
+ข้อมูลนำเข้า (Input) เป็นเรซูเม่ในรูปแบบไฟล์ภาพหรือ PDF ซึ่งทั้งหมดจะผ่านการแปลงเป็นภาพก่อนนำเข้าสู่กระบวนการประมวลผล โดยเรซูเม่แต่ละใบมีรูปแบบการจัดวางที่แตกต่างกัน เช่น แบบหนึ่งคอลัมน์และสองคอลัมน์
+
+**Code:**
+```python
+pix = page.get_pixmap(dpi=200) 
+```
+
+**Input:** รูปเรซูเม่ต้นฉบับทั้ง 2 แบบ (1 column และ แบบ 2 column) โดยยังไม่มีการแบ่ง section หรือประมวลผลใด 
+
 ![CV](Material/CV.jpg)
 
 ### 🔢 1.2 Label
-ป้ายกำกับ (Label) ถูกสร้างขึ้นเพื่อระบุขอบเขตของแต่ละ section ภายในเรซูเม่ โดย Label มีทั้งหมด 6 Label ได้แก่ Personality, Education, Experience, Skill, Project, Training โดยใช้รูปแบบ bounding box เพื่อกำหนดตำแหน่งเชิงพื้นที่ของข้อมูลในหน้าเอกสาร ขั้นตอนนี้เป็นส่วนสำคัญสำหรับการฝึกโมเดล YOLO ให้เรียนรู้โครงสร้างของเรซูเม่
+ป้ายกำกับ (Label) ถูกสร้างขึ้นเพื่อระบุขอบเขตของแต่ละ section ภายในเรซูเม่ โดย Label มีทั้งหมด 6 Label ได้แก่ Personality, Education, Experience, Skill, Project, Training โดยใช้รูปแบบ bounding box เพื่อกำหนดตำแหน่งเชิงพื้นที่ของข้อมูลในหน้าเอกสาร 
+
 ![LabelCV](Material/LabelCV.jpg)
 
 ### 🧮 1.3 Output (ผลลัพธ์จากขั้นตอนการ Labeling)
 
-ผลลัพธ์ของขั้นตอนนี้คือชุดข้อมูลที่ผ่านการจับคู่ระหว่างรูปเรซูเม่และป้ายกำกับอย่างสมบูรณ์ (image–label pairs) ซึ่งถูกใช้เป็นข้อมูลฝึกและทดสอบโมเดล Layout Detection ในขั้นตอนถัดไป การตรวจสอบความถูกต้องของการ label ในขั้นนี้ช่วยให้มั่นใจว่าโมเดลได้รับข้อมูลที่ถูกต้องและสอดคล้องกับโครงสร้างจริงของเอกสาร
+ผลลัพธ์ของขั้นตอนนี้คือชุดข้อมูลที่ผ่านการจับคู่ระหว่างรูปเรซูเม่และป้ายกำกับอย่างสมบูรณ์ (image–label pairs) ซึ่งจะนำไปใช้เป็นข้อมูลฝึกและทดสอบโมเดล Layout Detection ในขั้นตอนถัดไป 
+
+**Output:**
 
 ![LabelOutput](Material/LabelOutput.jpg)
 
@@ -91,21 +111,18 @@
 
 ### 🧿 2. การตรวจจับโครงสร้างเรซูเม่ด้วย YOLO11 (YOLO11 Series)
 
-เพื่อให้ได้โมเดลตรวจจับโครงสร้างเรซูเม่ที่เหมาะสมที่สุดสำหรับระบบนี้ งานวิจัยได้ทำการทดลองใช้โมเดล **YOLO11** หลายขนาด ได้แก่ **YOLO11n, YOLO11s, YOLO11m และ YOLO11xl** ซึ่งแต่ละขนาดมีความแตกต่างกันในด้านความซับซ้อนของโมเดล จำนวนพารามิเตอร์ และสมดุลระหว่างความแม่นยำกับความเร็วในการประมวลผล
+เพื่อคัดเลือกโมเดลที่เหมาะสมที่สุดสำหรับการตรวจจับโครงสร้างเรซูเม่ ได้มีการทดลองฝึกและประเมินโมเดล YOLO11 หลายขนาด ได้แก่ **YOLO11n, YOLO11s, YOLO11m และ YOLO11xl**
 
 #### 🤖 2.1 กระบวนการ (Process)
 
-ในขั้นตอนนี้ เรซูเม่ในรูปแบบภาพที่ผ่านการเตรียมและมีป้ายกำกับ (label) จากขั้นตอน Image–Label Pairing จะถูกนำมาใช้เป็นข้อมูลนำเข้า (input) สำหรับการฝึกและทดสอบโมเดล YOLO11 แต่ละขนาด โดยแต่ละโมเดลถูกฝึกภายใต้เงื่อนไขเดียวกัน เพื่อให้สามารถเปรียบเทียบประสิทธิภาพได้อย่างเป็นธรรม
+ในขั้นตอนนี้ เรซูเม่ในรูปแบบภาพที่ผ่านการเตรียมและมีป้ายกำกับ (label) จากขั้นตอน Image–Label Pairing จะถูกนำมาใช้เป็นข้อมูลนำเข้า สำหรับการฝึกและทดสอบโมเดล YOLO11 แต่ละขนาด โดยแต่ละโมเดลถูกฝึกภายใต้เงื่อนไขเดียวกัน เพื่อให้สามารถเปรียบเทียบประสิทธิภาพได้อย่างเป็นธรรม
 กระบวนการทำงานของโมเดล YOLO11 ประกอบด้วย:
 - รับภาพเรซูเม่เป็น input
 - ประมวลผลภาพผ่าน convolutional neural network
 - ตรวจจับตำแหน่ง bounding box ของแต่ละ section
-- จำแนกประเภทของ section เช่น Education, Experience และ Skills
+- จำแนกประเภทของ section ได้แก่ Personality, Education, Experience, Skills, Project และ Training
 
-โมเดลแต่ละขนาดถูกประเมินโดยใช้ชุดข้อมูล validation โดยพิจารณาค่าตัวชี้วัดมาตรฐาน ได้แก่ Precision, Recall และ mAP@0.5 เพื่อนำมาเปรียบเทียบและเลือกโมเดลที่เหมาะสมที่สุดสำหรับการใช้งานใน pipeline ของระบบ
-
-
-#### 🖼️ 2.2 ผลลัพธ์และการเปรียบเทียบ (Results and Comparison)
+#### 🖼️ 2.2 การคัดเลือกโมเดล (Model Selection)
 
 จากการทดลองเปรียบเทียบโมเดล YOLO11 หลายขนาด พบว่าโมเดลแต่ละขนาดมีจุดเด่นที่แตกต่างกัน โดยโมเดลขนาดเล็ก (YOLO11n) มีความรวดเร็วในการประมวลผลแต่ให้ความแม่นยำต่ำกว่า ในขณะที่โมเดลขนาดใหญ่ (YOLO11m และ YOLO11xl) ให้ความแม่นยำสูงขึ้นแต่มีความซับซ้อนและใช้ทรัพยากรในการประมวลผลมากกว่า
 
@@ -115,21 +132,36 @@
 
 ![ConfusionMatrix](Material/CM_ALL.jpg)
 
-
 #### 📈 2.3 ผลลัพธ์ของ YOLO11s และการประเมินผลโมเดล (Results and Evaluation)
+
+**Code:**
+```python
+model = YOLO('yolo11s.pt')
+results = model.train(data='data.yaml', epochs=300, imgsz=1280, ...)
+```
+
+**Output:**
 
 ![YOLOOutput](Material/YOLOOutput.jpg)
 
-การประเมินประสิทธิภาพของโมเดล YOLO11s ในขั้นตอนการตรวจจับโครงสร้างเรซูเม่ดำเนินการโดยใช้ชุดข้อมูลสำหรับการทดสอบ (validation set) เพื่อวัดความสามารถของโมเดลในการระบุขอบเขตและประเภทของแต่ละ section ภายในเอกสาร การประเมินผลใช้ตัวชี้วัดมาตรฐานสำหรับงานตรวจจับวัตถุ ได้แก่ **Precision**, **Recall** และ **mAP@0.5 (mAP50)**
+#### 🏗️ Training and Validation Analysis
+![TrainingandValidationAnalysis](Material/TV_Analysis.png)
 
-#### ✅ ตัวชี้วัดที่ใช้ในการประเมิน
+กราฟแสดงค่า training loss และ validation loss ของโมเดล YOLO11s แสดงแนวโน้มลดลงอย่างต่อเนื่องในทิศทางเดียวกัน ซึ่งบ่งชี้ถึงการเรียนรู้ที่มีเสถียรภาพและไม่พบอาการ overfitting ค่า Precision, Recall และ mAP เพิ่มขึ้นตามจำนวน epoch และมีแนวโน้มคงที่ในช่วงท้าย  
+แสดงให้เห็นว่าโมเดลสามารถเรียนรู้โครงสร้างเชิงพื้นที่ของเรซูเม่ได้อย่างมีประสิทธิภาพ และเหมาะสมสำหรับใช้งานเป็นโมดูล Layout Detection ใน pipeline
 
+#### 📊 2.4 ผลการประเมินรายคลาส (Per-Class Results)
+การประเมินประสิทธิภาพของโมเดล YOLO11s เพื่อวัดความสามารถของโมเดลในการระบุขอบเขตและประเภทของแต่ละ section ภายในเอกสาร จะใช้ตัวชี้วัดมาตรฐานสำหรับงานตรวจจับวัตถุ ได้แก่ 
 - **Precision** วัดความแม่นยำของการตรวจจับ โดยแสดงสัดส่วนของ bounding box ที่โมเดลตรวจจับได้อย่างถูกต้องเทียบกับจำนวนที่โมเดลทำนายทั้งหมด (Precision สูงหมายถึงโมเดลไม่ตรวจจับผิดพลาดบ่อย)
 - **Recall** วัดความสามารถของโมเดลในการตรวจจับ section ที่มีอยู่จริงในเรซูเม่ (Recall สูงหมายถึงโมเดลพลาดน้อย)
 - **mAP@0.5 (Mean Average Precision at IoU 0.5)** เป็นคะแนนรวมที่สะท้อนทั้งความแม่นยำของตำแหน่ง bounding box และการจำแนกประเภท โดยพิจารณาว่า bounding box ที่ตรวจจับได้มีค่าความซ้อนทับ (IoU) กับข้อมูลจริงอย่างน้อย 50%
 
-#### 📊 ผลการประเมินรายคลาส (Per-Class Results)
-
+**Code:**
+```python
+model = YOLO('best.pt')
+metrics = model.val()
+```
+**Output:**
 | Class        | Precision | Recall | mAP50 |
 |--------------|-----------|--------|-------|
 | Personality  | 100.0%    | 62.9%  | 80.9% |
@@ -140,7 +172,6 @@
 | Training     | 97.6%     | 78.6%  | 81.7% |
 | **Overall**  | –         | –      | **76.3%** |
 
-
 ผลการประเมินแสดงให้เห็นว่าโมเดล YOLO11s สามารถตรวจจับโครงสร้างเรซูเม่ได้อย่างมีประสิทธิภาพ โดยมีค่า **mAP@0.5 เฉลี่ยเท่ากับ 76.3%** ซึ่งอยู่ในระดับที่เหมาะสมสำหรับงานตรวจจับ layout ของเอกสารที่มีรูปแบบการจัดวางหลากหลาย
 
 คลาส **Project** ให้ผลลัพธ์ที่โดดเด่น โดยมีค่า Recall สูงถึง 100% และ mAP50 เท่ากับ 97.3% แสดงให้เห็นว่าโมเดลสามารถตรวจจับ section ที่มีลักษณะเป็น block ขนาดใหญ่และมีขอบเขตชัดเจนได้เป็นอย่างดี ในทางตรงกันข้าม คลาส **Skill** มีค่า Recall และ mAP50 ต่ำกว่าคลาสอื่น เนื่องจาก section ประเภทนี้มักมีขนาดเล็ก จัดวางได้ในหลายตำแหน่ง หรือมีรูปแบบไม่สม่ำเสมอ ซึ่งเพิ่มความยากในการตรวจจับเชิงภาพ
@@ -149,44 +180,165 @@
 
 ---
 
-### 3. Google Cloud Vision: การดึงข้อความจากแต่ละ Section (OCR Results)
+### 🧾🔤 3. การดึงข้อความจากแต่ละ Section (Optical Character Recognition (OCR))
 
-หลังจากได้ผลลัพธ์การตรวจจับโครงสร้างเรซูเม่จากโมเดล YOLO11s ในขั้นตอนที่ 2 แล้ว ระบบจะนำ bounding box ของแต่ละ section มาใช้เป็นข้อมูลนำเข้า (input) สำหรับกระบวนการดึงข้อความจากภาพด้วยบริการ **Google Cloud Vision API** ซึ่งทำหน้าที่เป็น Optical Character Recognition (OCR) engine หลักของระบบ
+ในขั้นตอนการดึงข้อความจากภาพ ระบบจำเป็นต้องเลือก OCR engine ที่สามารถรองรับเรซูเม่ภาษาไทยและภาษาอังกฤษ และสามารถทำงานได้อย่างเสถียรภายใต้สภาพแวดล้อม Google Colab ดังนั้นจึงได้ทำการทดลองและเปรียบเทียบ OCR หลายตัวก่อนตัดสินใจเลือก OCR engine หลักของระบบ
+ได้แก่ PaddleOCR (หลายเวอร์ชัน), EasyOCR, Surya OCR, Tesseract และ Google Cloud Vision โดยพิจารณาจากปัจจัยหลักดังต่อไปนี้
 
-#### 3.1 กระบวนการ (Process)
+ผลการทดลองพบว่า OCR engine ส่วนใหญ่ประสบปัญหาในด้าน dependency หรือความไม่เข้ากันกับเวอร์ชันของ Python และ NumPy ที่ใช้งานบน Google Colab ในช่วงเวลาทดลอง โดยเฉพาะ PaddleOCR และ Surya OCR ซึ่งไม่สามารถรันได้อย่างเสถียร ในขณะที่ EasyOCR แม้จะใช้งานได้ แต่คุณภาพการอ่านภาษาไทยยังไม่สม่ำเสมอ ในทางตรงกันข้าม **Google Cloud Vision** สามารถอ่านภาษาไทยได้ดี มีความเสถียรสูง และไม่พบปัญหา dependency ภายใต้สภาพแวดล้อมที่ใช้งาน แต่ต้องมี API Key โดยใช้งานได้ฟรี 1,000 รูป/เดือน
 
-ในขั้นตอนนี้ ระบบจะทำการตัดภาพ (cropping) ตามขอบเขต bounding box ของแต่ละ section ที่ได้จาก YOLO11s จากนั้นภาพที่ถูกแยกตาม section จะถูกส่งไปยัง Google Cloud Vision API เพื่อทำการแปลงข้อความจากภาพเป็นตัวอักษร
+#### ☁️ 3.1 Google Cloud Vision Pipeline
 
-กระบวนการทำงานประกอบด้วย:
-- รับ bounding box ของแต่ละ section จากผลการตรวจจับของ YOLO11s
-- ตัดภาพเรซูเม่ตาม bounding box เพื่อแยกแต่ละ section ออกมา
-- ส่งภาพของแต่ละ section ไปยัง Google Cloud Vision API
-- รับผลลัพธ์ข้อความที่ถูกแปลงจากภาพ (OCR text)
+หลังจากได้ผลลัพธ์การตรวจจับโครงสร้างเรซูเม่จากโมเดล YOLO11s ในขั้นตอนที่ 2 แล้ว ระบบจะนำ bounding box ของแต่ละ section มาใช้เป็นข้อมูลนำเข้าสำหรับกระบวนการดึงข้อความจากภาพด้วย **Google Cloud Vision API** 
+กระบวนการทำงานประกอบไปด้วย Function ต่าง ๆ ดังนี้
 
-การทำ OCR แยกตาม section ช่วยลดปัญหาการอ่านข้อความข้ามส่วน (cross‑section noise) และรักษาบริบทของข้อความให้สอดคล้องกับโครงสร้างเอกสาร
+**Function 1: preprocess_crop() เตรียมรูปก่อนส่งให้ OCR อ่าน**
+```python
+def preprocess_crop(crop_img):
+    h, w = crop_img.shape[:2]
+    if h < 50:
+        scale = 50 / h
+        crop_img = cv2.resize(...)
+    return crop_img
+```
 
----
+**Function 2: postprocess_thai() ทำความสะอาดข้อความไทยที่ OCR อ่านได้**
+```python
+def postprocess_thai(text):
+    text = th_normalize(text)
+    text = ' '.join(text.split())
+    return text
+```
 
-#### 3.2 ผลลัพธ์ (Results)
+**Function 3: extract_text_from_crop() ส่งรูปไป Google Cloud Vision API แล้วรับข้อความกลับมา**
+```python
+def extract_text_from_crop(crop_img):
+    # 1.
+    _, buffer = cv2.imencode('.jpg', processed)
+    img_base64 = base64.b64encode(buffer).decode('utf-8')
+    # 2.
+    payload = {
+        'requests': [{
+            'image': {'content': img_base64},
+            'features': [{'type': 'TEXT_DETECTION'}],
+            'imageContext': {'languageHints': ['th', 'en']}
+        }]
+    }
+    # 3.
+    response = requests.post(VISION_URL, json=payload)
+    # 4. 
+    raw_text = result['responses'][0]['textAnnotations'][0]['description']
+    clean_text = postprocess_thai(raw_text)
+    return raw_text, clean_text
+```
 
-ผลลัพธ์จาก Google Cloud Vision แสดงให้เห็นว่าระบบสามารถดึงข้อความจากแต่ละ section ของเรซูเม่ได้อย่างมีประสิทธิภาพ โดยข้อความที่ได้ถูกจัดกลุ่มตามประเภทของ section อย่างชัดเจน ตัวอย่างผลลัพธ์ประกอบด้วย:
-- ข้อความจากส่วน Education เช่น ชื่อปริญญาและสถาบันการศึกษา
-- ข้อความจากส่วน Experience ซึ่งอาจมีรายละเอียดหลายบรรทัด
-- ข้อความจากส่วน Skills ในรูปแบบรายการหรือข้อความสั้น
+**Function 4: parse_resume() Pipeline YOLO detect -> crop -> OCR -> JSON**
+```python
+def parse_resume(image_path):
+    # 1.
+    results = yolo_model.predict(image_path, conf=0.25)
+    # 2. 
+    boxes = sorted(r.boxes, key=lambda x: x.xyxy[0][1])
+    # 3. 
+    for box in boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])  # 
+        label = yolo_model.names[int(box.cls[0])]  #  class
+        conf = float(box.conf[0])  # 
+        # 4.
+        crop = img_bgr[cy1:cy2, cx1:cx2]
+        # 5.
+        raw_text, clean_text = extract_text_from_crop(crop)
+        # 6. 
+        sections.append({type, confidence, bbox, raw_text, clean_text})
+    # 7.
+    gc.collect()
+    return {source_file, sections, metadata}
+```
+#### 📦 3.2 ผลลัพธ์ (Results)
 
-การใช้ Google Cloud Vision ช่วยให้ระบบรองรับเรซูเม่ที่มีทั้งภาษาไทยและภาษาอังกฤษได้ดี และให้คุณภาพผลลัพธ์ที่พร้อมสำหรับการประมวลผลเชิงความหมายในขั้นตอนถัดไป
+ผลลัพธ์จาก Google Cloud Vision แสดงให้เห็นว่าระบบสามารถดึงข้อความจากแต่ละ section ของเรซูเม่ได้อย่างมีประสิทธิภาพ โดยข้อความที่ได้ถูกจัดกลุ่มตามประเภทของ section อย่างชัดเจน 
+
+**Output:**
 
 ![GCVOutput](Material/GCVOutput.jpg)
 
+```json
+{
+  "source_file": "Jennifer Mabangkru_page_0001.jpg",
+  "sections": [
+    {
+      "type": "Personality",
+      "confidence": 0.381,
+      "bbox": [
+        473,
+        185,
+        1228,
+        579
+      ],
+      "raw_text": "Jennifer Mabangkru\nCEO & Senior Business Consultant\nMy expertise and passion lie in business strategy\nplanning and solutions to achieve clients' goals by\nproviding analysis and vision with my expertise in market\npenetration, manufacturing line planning, organizational management, servicing, accounting, and legal issues.",
+      "clean_text": "Jennifer Mabangkru CEO & Senior Business Consultant My expertise and passion lie in business strategy planning and solutions to achieve clients' goals by providing analysis and vision with my expertise in market penetration, manufacturing line planning, organizational management, servicing, accounting, and legal issues."
+    },
+    {
+      "type": "Experience",
+      "confidence": 0.3522,
+      "bbox": [
+        570,
+        585,
+        1231,
+        1056
+      ],
+      "raw_text": "Work Experience\nDiplomatic Representative (Internship) 2018\nPermanent Mission of Thailand to the United Nations, New York City, USA\nPeacekeeping field, Economic-Social Council, Human rights council\nPurchasing Manager and Head of Brand Management Section and manage team",
+      "clean_text": "Work Experience Diplomatic Representative (Internship) 2018 Permanent Mission of Thailand to the United Nations, New York City, USA Peacekeeping field, Economic-Social Council, Human rights council Purchasing Manager and Head of Brand Management Section and manage team"
+    },
+    {
+      "type": "Education",
+      "confidence": 0.8955,
+      "bbox": [
+        0,
+        876,
+        582,
+        1092
+      ],
+      "raw_text": "Education\nMaster of Business Administration\n(Finance and Banking Management)\nRamkhamhaeng University\nLawyer License Class LX\nLawyers Council Under the Royal Patronage\nBachelor of Law (Administrative and Public Law)\nChulalongkorn University",
+      "clean_text": "Education Master of Business Administration (Finance and Banking Management) Ramkhamhaeng University Lawyer License Class LX Lawyers Council Under the Royal Patronage Bachelor of Law (Administrative and Public Law) Chulalongkorn University"
+    },
+    {
+      "type": "Skill",
+      "confidence": 0.7327,
+      "bbox": [
+        578,
+        1069,
+        1211,
+        1322
+      ],
+      "raw_text": ")s)\nSkills\nTRANSLATOR & INTERPRETER\nFACTORY LINE PLANNING\nCOMPANY SECRETARY\nINTERNATIONAL TAX PLANNING\nSAP S/4 HANA\nINFOGRAPHIC\nSOCIAL MEDIA\nE-COMMERCE",
+      "clean_text": ")s Skills TRANSLATOR & INTERPRETER FACTORY LINE PLANNING COMPANY SECRETARY INTERNATIONAL TAX PLANNING SAP S/4 HANA INFOGRAPHIC SOCIAL MEDIA E-COMMERCE"
+    },
+    {
+      "type": "Experience",
+      "confidence": 0.524,
+      "bbox": [
+        588,
+        1319,
+        1187,
+        1691
+      ],
+      "raw_text": "Awards\nBangkok Youth Role Model 2006\nBangkok Governor, Apirak Kosayodhin\nThe Youth Role Model 2006\nOffice of the Narcotics Control Board (ONCB)\nExcellent Military Leadership 2009\nReserve Affairs Center of Thailand",
+      "clean_text": "Awards Bangkok Youth Role Model 2006 Bangkok Governor, Apirak Kosayodhin The Youth Role Model 2006 Office of the Narcotics Control Board (ONCB) Excellent Military Leadership 2009 Reserve Affairs Center of Thailand"
+    }
+  ]
+}
+
+```
 ---
+
+## 😄🙏to be continued 
 
 ### 4. การดึงข้อมูลเชิงความหมาย (Semantic Information Extraction)
 
-หลังจากได้ข้อความจากแต่ละ section ด้วย Google Cloud Vision ในขั้นตอนที่ 3 แล้ว ระบบจะทำการประมวลผลข้อความด้วยเทคนิค Natural Language Processing (NLP) เพื่อดึงข้อมูลเชิงความหมายออกจากข้อความ โดยให้ความสำคัญกับบริบทของ section ที่ข้อความปรากฏ
+---
 
-สำหรับข้อความภาษาไทย ระบบใช้ไลบรารี **PyThaiNLP** เพื่อช่วยในการตัดคำ การปรับรูปแบบข้อความ และการเตรียมข้อมูลสำหรับการดึงข้อมูลเชิงความหมาย ในขณะที่ข้อความภาษาอังกฤษสามารถประมวลผลด้วยเครื่องมือ NLP ทั่วไปได้ ขั้นตอนนี้ออกแบบให้เป็น Section‑Aware Semantic Extraction กล่าวคือ ข้อความจากแต่ละ section จะถูกประมวลผลแยกจากกันภายใต้บริบทของ section นั้น ๆ
-
-การใช้ PyThaiNLP ช่วยให้ระบบสามารถจัดการกับลักษณะเฉพาะของภาษาไทย เช่น การไม่มีตัวแบ่งคำ และความกำกวมของขอบเขตคำ ซึ่งช่วยเพิ่มความถูกต้องในการดึงข้อมูลจากเรซูเม่ภาษาไทย และทำให้ผลลัพธ์ที่ได้อยู่ในรูปแบบที่พร้อมสำหรับการจัดเก็บเป็นข้อมูลเชิงโครงสร้าง
+### 5. Job Matching กับ ฐานข้อมูลการรับสมัครงานจาก Linkedin
 
 ---
 
