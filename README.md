@@ -85,11 +85,6 @@
 ### 📚 1.1 Input
 ข้อมูลนำเข้า (Input) เป็นเรซูเม่ในรูปแบบไฟล์ภาพหรือ PDF ซึ่งทั้งหมดจะผ่านการแปลงเป็นภาพก่อนนำเข้าสู่กระบวนการประมวลผล โดยเรซูเม่แต่ละใบมีรูปแบบการจัดวางที่แตกต่างกัน เช่น แบบหนึ่งคอลัมน์และสองคอลัมน์
 
-**Code:**
-```python
-pix = page.get_pixmap(dpi=200) 
-```
-
 **Input:** รูปเรซูเม่ต้นฉบับทั้ง 2 แบบ (1 column และ แบบ 2 column) โดยยังไม่มีการแบ่ง section หรือประมวลผลใด 
 
 ![CV](Material/CV.jpg)
@@ -134,12 +129,6 @@ pix = page.get_pixmap(dpi=200)
 
 #### 📈 2.3 ผลลัพธ์ของ YOLO11s และการประเมินผลโมเดล (Results and Evaluation)
 
-**Code:**
-```python
-model = YOLO('yolo11s.pt')
-results = model.train(data='data.yaml', epochs=300, imgsz=1280, ...)
-```
-
 **Output:**
 
 ![YOLOOutput](Material/YOLOOutput.jpg)
@@ -156,11 +145,6 @@ results = model.train(data='data.yaml', epochs=300, imgsz=1280, ...)
 - **Recall** วัดความสามารถของโมเดลในการตรวจจับ section ที่มีอยู่จริงในเรซูเม่ (Recall สูงหมายถึงโมเดลพลาดน้อย)
 - **mAP@0.5 (Mean Average Precision at IoU 0.5)** เป็นคะแนนรวมที่สะท้อนทั้งความแม่นยำของตำแหน่ง bounding box และการจำแนกประเภท โดยพิจารณาว่า bounding box ที่ตรวจจับได้มีค่าความซ้อนทับ (IoU) กับข้อมูลจริงอย่างน้อย 50%
 
-**Code:**
-```python
-model = YOLO('best.pt')
-metrics = model.val()
-```
 **Output:**
 | Class        | Precision | Recall | mAP50 |
 |--------------|-----------|--------|-------|
@@ -213,10 +197,9 @@ def postprocess_thai(text):
 **Function 3: extract_text_from_crop() ส่งรูปไป Google Cloud Vision API แล้วรับข้อความกลับมา**
 ```python
 def extract_text_from_crop(crop_img):
-    # 1.
+    processed = preprocess_crop(crop_img)
     _, buffer = cv2.imencode('.jpg', processed)
     img_base64 = base64.b64encode(buffer).decode('utf-8')
-    # 2.
     payload = {
         'requests': [{
             'image': {'content': img_base64},
@@ -224,10 +207,13 @@ def extract_text_from_crop(crop_img):
             'imageContext': {'languageHints': ['th', 'en']}
         }]
     }
-    # 3.
     response = requests.post(VISION_URL, json=payload)
-    # 4. 
-    raw_text = result['responses'][0]['textAnnotations'][0]['description']
+    result = response.json()
+    raw_text = ''
+    if 'responses' in result and result['responses']:
+        annotations = result['responses'][0].get('textAnnotations', [])
+        if annotations:
+            raw_text = annotations[0].get('description', '').strip()
     clean_text = postprocess_thai(raw_text)
     return raw_text, clean_text
 ```
@@ -235,24 +221,46 @@ def extract_text_from_crop(crop_img):
 **Function 4: parse_resume() Pipeline YOLO detect -> crop -> OCR -> JSON**
 ```python
 def parse_resume(image_path):
-    # 1.
-    results = yolo_model.predict(image_path, conf=0.25)
-    # 2. 
-    boxes = sorted(r.boxes, key=lambda x: x.xyxy[0][1])
-    # 3. 
-    for box in boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])  # 
-        label = yolo_model.names[int(box.cls[0])]  #  class
-        conf = float(box.conf[0])  # 
-        # 4.
-        crop = img_bgr[cy1:cy2, cx1:cx2]
-        # 5.
-        raw_text, clean_text = extract_text_from_crop(crop)
-        # 6. 
-        sections.append({type, confidence, bbox, raw_text, clean_text})
-    # 7.
+    image_path = str(image_path)
+    results = yolo_model.predict(
+        image_path,
+        conf=CONFIG['conf_threshold'],
+        iou=CONFIG['iou_threshold'],)
+    sections = []
+    for r in results:
+        img_bgr = r.orig_img
+        h, w = img_bgr.shape[:2]
+        boxes = sorted(r.boxes, key=lambda x: x.xyxy[0][1])
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            cls_id = int(box.cls[0])
+            conf = float(box.conf[0])
+            label = yolo_model.names[cls_id]
+            pad_x = int((x2 - x1) * CONFIG['crop_pad_ratio'])
+            pad_y = int((y2 - y1) * CONFIG['crop_pad_ratio'])
+            cx1 = max(0, x1 - pad_x)
+            cy1 = max(0, y1 - pad_y)
+            cx2 = min(w, x2 + pad_x)
+            cy2 = min(h, y2 + pad_y)
+            crop = img_bgr[cy1:cy2, cx1:cx2]
+            raw_text, clean_text = extract_text_from_crop(crop)
+            sections.append({
+                'type': label,
+                'confidence': round(conf, 4),
+                'bbox': [x1, y1, x2, y2],
+                'raw_text': raw_text,
+                'clean_text': clean_text,    })
+        del r
+    del results
     gc.collect()
-    return {source_file, sections, metadata}
+    return {
+        'source_file': Path(image_path).name,
+        'sections': sections,
+        'metadata': {
+            'model': str(CONFIG['model_weights']),
+            'conf_threshold': CONFIG['conf_threshold'],
+            'num_sections': len(sections),
+        },    }
 ```
 #### 📦 3.2 ผลลัพธ์ (Results)
 
@@ -264,19 +272,19 @@ def parse_resume(image_path):
 
 ```json
 {
-  "source_file": "Jennifer Mabangkru_page_0001.jpg",
+  "source_file": "Jennifer Mabangkru_page-0001.jpg",
   "sections": [
     {
       "type": "Personality",
-      "confidence": 0.381,
+      "confidence": 0.3811,
       "bbox": [
         473,
         185,
         1228,
         579
       ],
-      "raw_text": "Jennifer Mabangkru\nCEO & Senior Business Consultant\nMy expertise and passion lie in business strategy\nplanning and solutions to achieve clients' goals by\nproviding analysis and vision with my expertise in market\npenetration, manufacturing line planning, organizational management, servicing, accounting, and legal issues.",
-      "clean_text": "Jennifer Mabangkru CEO & Senior Business Consultant My expertise and passion lie in business strategy planning and solutions to achieve clients' goals by providing analysis and vision with my expertise in market penetration, manufacturing line planning, organizational management, servicing, accounting, and legal issues."
+      "raw_text": "Jennifer Mabangkru\nCEO & Senior Business Consultant\nMy expertise and passion lie in business strategy\nplanning and solutions to achieve clients' goals by\nproviding analysis and vision with my expertise in market\npenetration, manufacturing line planning, organizational\nmanagement, marketing, accounting, and legal\nconsulting. All I have in work is a can-do attitude, no\nmatter how challenging the project is. Just Make the\nimpossible to be possible!",
+      "clean_text": "Jennifer Mabangkru CEO & Senior Business Consultant My expertise and passion lie in business strategy planning and solutions to achieve clients' goals by providing analysis and vision with my expertise in market penetration, manufacturing line planning, organizational management, marketing, accounting, and legal consulting. All I have in work is a can-do attitude, no matter how challenging the project is. Just Make the impossible to be possible!"
     },
     {
       "type": "Experience",
@@ -287,8 +295,8 @@ def parse_resume(image_path):
         1231,
         1056
       ],
-      "raw_text": "Work Experience\nDiplomatic Representative (Internship) 2018\nPermanent Mission of Thailand to the United Nations, New York City, USA\nPeacekeeping field, Economic-Social Council, Human rights council\nPurchasing Manager and Head of Brand Management Section and manage team",
-      "clean_text": "Work Experience Diplomatic Representative (Internship) 2018 Permanent Mission of Thailand to the United Nations, New York City, USA Peacekeeping field, Economic-Social Council, Human rights council Purchasing Manager and Head of Brand Management Section and manage team"
+      "raw_text": "Work Experience\nDiplomatic Representative (Internship) 2010\nPermanent Mission of Thailand to the United Nations, New York City, USA\nPeacekeeping field, Economic-Social Council, Human rights council\nPurchasing Manager and Head of Brand Manager\n2010-2016\nCentral Department Store\nSource and manage home, spa, watch, and luxury merchandise\nBusiness Consultant to the CEO 2012-2025\nListed companies in NASDAQ and SET\nAdvisor to the CEO and BOD about the Thailand market, strategic planning\nin manufacturing, legal, accounting, financing, and marketing aspects\nCEO & Managing Director 2016-2025\nTAI GUO PIN GROUP\nThai dried fruit manufacturer \"TAI GUO PIN\", exporting worldwide, the\nexclusive importer of Juvena of Switzerland and Marlies Moller brand.",
+      "clean_text": "Work Experience Diplomatic Representative (Internship) 2010 Permanent Mission of Thailand to the United Nations, New York City, USA Peacekeeping field, Economic-Social Council, Human rights council Purchasing Manager and Head of Brand Manager 2010-2016 Central Department Store Source and manage home, spa, watch, and luxury merchandise Business Consultant to the CEO 2012-2025 Listed companies in NASDAQ and SET Advisor to the CEO and BOD about the Thailand market, strategic planning in manufacturing, legal, accounting, financing, and marketing aspects CEO & Managing Director 2016-2025 TAI GUO PIN GROUP Thai dried fruit manufacturer \"TAI GUO PIN\", exporting worldwide, the exclusive importer of Juvena of Switzerland and Marlies Moller brand."
     },
     {
       "type": "Education",
@@ -297,10 +305,10 @@ def parse_resume(image_path):
         0,
         876,
         582,
-        1092
+        1692
       ],
-      "raw_text": "Education\nMaster of Business Administration\n(Finance and Banking Management)\nRamkhamhaeng University\nLawyer License Class LX\nLawyers Council Under the Royal Patronage\nBachelor of Law (Administrative and Public Law)\nChulalongkorn University",
-      "clean_text": "Education Master of Business Administration (Finance and Banking Management) Ramkhamhaeng University Lawyer License Class LX Lawyers Council Under the Royal Patronage Bachelor of Law (Administrative and Public Law) Chulalongkorn University"
+      "raw_text": "Education\nMaster of Business Administration\n(Finance and Banking Management)\nRamkhamhaeng University\nLawyer License Class LX\nLawyers Council Under the Royal Patronage\nBachelor of Law (Administrative and Public Law)\nChulalongkorn University\nBachelor of Arts (Business Chinese)\nAssumption University (ABAC)\nBachelor of Accountancy (Risk Management)\nUniversity of Thai Chamber of Commerce\nBachelor of Political Science (International Relations)\nRamkhamhaeng University\nBachelor of Science (Engineering Technology\nProduction and Management)\nSukhothai Thammathirat University\nBachelor of Science\n(Industrial and Organizational Psychology)\nRamkhamhaeng University\nCustoms Clearance Agent Class CVII\nThai Import-Export Training Institute\nBattalion commander, Nuclear, Biological, and\nChemical Weapons\n5th year standing Reserve Officer Training Corps\n(ROTCS) curriculum in Thailand and Singapore",
+      "clean_text": "Education Master of Business Administration (Finance and Banking Management) Ramkhamhaeng University Lawyer License Class LX Lawyers Council Under the Royal Patronage Bachelor of Law (Administrative and Public Law) Chulalongkorn University Bachelor of Arts (Business Chinese) Assumption University (ABAC) Bachelor of Accountancy (Risk Management) University of Thai Chamber of Commerce Bachelor of Political Science (International Relations) Ramkhamhaeng University Bachelor of Science (Engineering Technology Production and Management) Sukhothai Thammathirat University Bachelor of Science (Industrial and Organizational Psychology) Ramkhamhaeng University Customs Clearance Agent Class CVII Thai Import-Export Training Institute Battalion commander, Nuclear, Biological, and Chemical Weapons 5th year standing Reserve Officer Training Corps (ROTCS) curriculum in Thailand and Singapore"
     },
     {
       "type": "Skill",
@@ -311,8 +319,8 @@ def parse_resume(image_path):
         1211,
         1322
       ],
-      "raw_text": ")s)\nSkills\nTRANSLATOR & INTERPRETER\nFACTORY LINE PLANNING\nCOMPANY SECRETARY\nINTERNATIONAL TAX PLANNING\nSAP S/4 HANA\nINFOGRAPHIC\nSOCIAL MEDIA\nE-COMMERCE",
-      "clean_text": ")s Skills TRANSLATOR & INTERPRETER FACTORY LINE PLANNING COMPANY SECRETARY INTERNATIONAL TAX PLANNING SAP S/4 HANA INFOGRAPHIC SOCIAL MEDIA E-COMMERCE"
+      "raw_text": "าร)\nSkills\nTRANSLATOR & INTERPRETER\nFACTORY LINE PLANNING\nCOMPANY SECRETARY\nINTERNATIONAL TAX PLANNING\nSAP S/4 HANA\nINFOGRAPHIC\nSOCIAL MEDIA\nE-COMMERCE",
+      "clean_text": "าร) Skills TRANSLATOR & INTERPRETER FACTORY LINE PLANNING COMPANY SECRETARY INTERNATIONAL TAX PLANNING SAP S/4 HANA INFOGRAPHIC SOCIAL MEDIA E-COMMERCE"
     },
     {
       "type": "Experience",
@@ -323,10 +331,15 @@ def parse_resume(image_path):
         1187,
         1691
       ],
-      "raw_text": "Awards\nBangkok Youth Role Model 2006\nBangkok Governor, Apirak Kosayodhin\nThe Youth Role Model 2006\nOffice of the Narcotics Control Board (ONCB)\nExcellent Military Leadership 2009\nReserve Affairs Center of Thailand",
-      "clean_text": "Awards Bangkok Youth Role Model 2006 Bangkok Governor, Apirak Kosayodhin The Youth Role Model 2006 Office of the Narcotics Control Board (ONCB) Excellent Military Leadership 2009 Reserve Affairs Center of Thailand"
+      "raw_text": "Awards\nBangkok Youth Role Model 2006\nBangkok Governor, Apirak Kosayodhin\nThe Youth Role Model 2006\nOffice of the Narcotics Control Board (ONCB)\nExcellent Military Leadership 2009\nReserve Affairs Center of Thailand\nTrojan Award of the Outstanding Alumni 2012\nAssumption University Alumni Association\nPowerful & Talented Women 2016\nDON'T Magazine",
+      "clean_text": "Awards Bangkok Youth Role Model 2006 Bangkok Governor, Apirak Kosayodhin The Youth Role Model 2006 Office of the Narcotics Control Board (ONCB) Excellent Military Leadership 2009 Reserve Affairs Center of Thailand Trojan Award of the Outstanding Alumni 2012 Assumption University Alumni Association Powerful & Talented Women 2016 DON'T Magazine"
     }
-  ]
+  ],
+  "metadata": {
+    "model": "/content/drive/MyDrive/04_Project/Ds533/train_results/yolo11_resume_v4/weights/best.pt",
+    "conf_threshold": 0.25,
+    "num_sections": 5
+  }
 }
 
 ```
